@@ -27,10 +27,14 @@ jobs:
           PAYLOAD=$(jq -n --arg text "$ISSUE_BODY" \
             '{"contents":[{"parts":[{"text":$text}]}]}')
 
-          RESPONSE=$(curl -s \
+          RAW=$(curl -s \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD" \
-            | jq -r '.candidates[0].content.parts[0].text')
+            -d "$PAYLOAD")
+
+          echo "RAW RESPONSE: $RAW"
+
+          RESPONSE=$(echo "$RAW" | jq -r '.candidates[0].content.parts[0].text')
+          echo "PARSED: $RESPONSE"
 
           gh issue comment "$ISSUE_NUMBER" --body "$RESPONSE"
