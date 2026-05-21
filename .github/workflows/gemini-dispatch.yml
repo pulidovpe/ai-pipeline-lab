@@ -21,14 +21,16 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          # Obtener el texto del trigger (issue o comentario)
-          TEXTO="${{ github.event.issue.body || github.event.comment.body }}"
+          PAYLOAD=$(jq -n --arg text "$ISSUE_BODY" \
+            '{"contents":[{"parts":[{"text":$text}]}]}')
 
           RESPONSE=$(curl -s \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"contents\":[{\"parts\":[{\"text\":\"$TEXTO\"}]}]}" \
+            -d "$PAYLOAD" \
             | jq -r '.candidates[0].content.parts[0].text')
 
-          gh issue comment ${{ github.event.issue.number }} --body "$RESPONSE"
+          gh issue comment "$ISSUE_NUMBER" --body "$RESPONSE"
