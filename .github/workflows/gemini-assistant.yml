@@ -1,0 +1,22 @@
+name: Gemini Assistant
+  on:
+    workflow_dispatch:
+      inputs:
+        prompt:
+          description: 'Prompt para Gemini'
+          required: true
+
+jobs:
+  assist:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          prompt: ${{ github.event.inputs.prompt }}
