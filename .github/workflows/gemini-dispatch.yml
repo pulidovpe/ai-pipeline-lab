@@ -17,24 +17,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Responder con Gemini
+      - name: Responder con IA
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CF_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
+          ISSUE_BODY=$(gh issue view "$ISSUE_NUMBER" --json body --jq '.body')
+
+          echo "ISSUE_BODY: $ISSUE_BODY"
+
           PAYLOAD=$(jq -n --arg text "$ISSUE_BODY" \
-            '{"contents":[{"parts":[{"text":$text}]}]}')
+            '{"messages":[{"role":"user","content":$text}]}')
 
           RAW=$(curl -s \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=$GEMINI_API_KEY" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast" \
+            -H "Authorization: Bearer $CF_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
-          echo "RAW RESPONSE: $RAW"
-
-          RESPONSE=$(echo "$RAW" | jq -r '.candidates[0].content.parts[0].text')
-          echo "PARSED: $RESPONSE"
-
+          echo "RAW: $RAW"
+          RESPONSE=$(echo "$RAW" | jq -r '.result.response')
           gh issue comment "$ISSUE_NUMBER" --body "$RESPONSE"
