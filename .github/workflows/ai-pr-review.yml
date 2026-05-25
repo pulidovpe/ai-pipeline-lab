@@ -30,26 +30,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          DIFF=$(cat pr_diff.txt | head -300)
-          CONTEXT=$(cat CONTEXT.md 2>/dev/null || echo "")
+          DIFF=$(cat pr_diff.txt | head -n 300)
+          CONTEXT=$(cat CONTEXT.md 2>/dev/null || echo "Sin contexto adicional.")
+          
+          # Definimos el prompt como una variable para mantener el orden
+          PROMPT="Eres un senior developer haciendo code review. Contexto del proyecto: $CONTEXT 
+          
+          Diff del PR: $DIFF 
+          
+          Reporta:
+          1. Bugs y casos borde no manejados (con numero de linea)
+          2. Vulnerabilidades de seguridad
+          3. Funciones sin test
+          4. Sugerencias de mejora
+          Se conciso y especifico."
 
-          PAYLOAD=$(jq -n --arg diff "$DIFF" --arg ctx "$CONTEXT" '{
-          "messages":[{
-            "role":"user",
-            "content": ("Eres un senior developer haciendo code review. Contexto del proyecto:
-" + $ctx + "
-
-Diff del PR:
-" + $diff + "
-
-Reporta:
-1. Bugs y casos borde no manejados (con numero de linea)
-2. Vulnerabilidades de seguridad
-3. Funciones sin test
-4. Sugerencias de mejora
-Se conciso y especifico.")
-            }]
-          }')
+          # Pasamos el prompt como un argumento seguro
+          PAYLOAD=$(jq -n --arg msg "$PROMPT" '{messages:[{"role":"user", "content": $msg}]}')
 
           RESPONSE=$(curl -s \
             "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast" \
@@ -59,4 +56,4 @@ Se conciso y especifico.")
             | jq -r '.result.response')
 
           gh pr comment "$PR_NUMBER" --body "## ■ AI Code Review 
-$RESPONSE"
+          $RESPONSE"
