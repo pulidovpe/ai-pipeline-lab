@@ -49,6 +49,5 @@ jobs:
             -d "$PAYLOAD" \
             | jq -r '.result.response')
 
-          gh pr comment "$PR_NUMBER" --body "## 🤖 AI Code Review
-
-$RESPONSE"
+          gh pr comment "$PR_NUMBER" --body "## ■ AI Code Review 
+          $RESPONSE"
