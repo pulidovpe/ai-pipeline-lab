@@ -5,6 +5,8 @@ on:
     paths:
       - 'src/**/*.py'
       - 'tests/**/*.py'
+  workflow_dispatch:
+
 jobs:
   review:
     runs-on: ubuntu-latest
