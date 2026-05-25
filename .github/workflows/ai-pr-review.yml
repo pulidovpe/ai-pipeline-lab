@@ -1,0 +1,62 @@
+name: AI PR Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Obtener diff del PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: 
+          gh pr diff ${{ github.event.pull_request.number }} > pr_diff.txt
+          echo "=== DIFF ===" && cat pr_diff.txt
+
+      - name: Review con IA
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CF_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          DIFF=$(cat pr_diff.txt | head -300)
+          CONTEXT=$(cat CONTEXT.md 2>/dev/null || echo "")
+
+          PAYLOAD=$(jq -n --arg diff "$DIFF" --arg ctx "$CONTEXT" '{
+          "messages":[{
+            "role":"user",
+            "content": ("Eres un senior developer haciendo code review. Contexto del proyecto:
+" + $ctx + "
+
+Diff del PR:
+" + $diff + "
+
+Reporta:
+1. Bugs y casos borde no manejados (con numero de linea)
+2. Vulnerabilidades de seguridad
+3. Funciones sin test
+4. Sugerencias de mejora
+Se conciso y especifico.")
+            }]
+          }')
+
+          RESPONSE=$(curl -s \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            | jq -r '.result.response')
+
+          gh pr comment "$PR_NUMBER" --body "## ■ AI Code Review 
+$RESPONSE"
