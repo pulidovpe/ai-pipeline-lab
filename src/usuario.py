@@ -1,4 +1,5 @@
 # Problema 1: credencial hardcodeada
+
 API_SECRET = 'sk-prod-1234567890abcdef'
 
 def buscar_usuario(user_id):
