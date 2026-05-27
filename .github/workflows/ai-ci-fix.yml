@@ -13,7 +13,7 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
@@ -23,6 +23,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh run view ${{ github.event.workflow_run.id }} --log-failed > ci_failure.log 2>&1 || true
+          cat ci_failure.log
+    
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.11'
 
       - name: Analizar y fixear con IA
         env:
@@ -30,7 +35,8 @@ jobs:
           CF_TOKEN: ${{ secrets.CF_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          LOGS=$(cat ci_failure.log | head -150)
+          pip install pytest -q
+          LOGS=$(head -150 ci_failure.log)
           SRC=$(cat src/calculadora.py)
           PAYLOAD=$(jq -n --arg logs "$LOGS" --arg src "$SRC" '{
             "messages":[{
