@@ -1,39 +1,37 @@
 name: AI CI Fix
 on:
-  check_run:
+  workflow_run:
+    workflows: ['CI Tests']
     types: [completed]
+    branches:
+      - 'feature/**'
+      - main
 
 jobs:
   fix:
-    if: |
-      github.event.check_run.conclusion == 'failure' &&
-      github.event.check_run.name == 'test'
+    if: github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
       actions: read
     steps:
       - uses: actions/checkout@v4.2.2
         with:
-          ref: ${{ github.event.check_run.check_suite.head_branch }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-
-      - name: Obtener logs del CI fallido
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh run view ${{ github.event.check_run.details_url }} --log-failed > ci_failure.log 2>&1 || true
-          # Alternativa si lo anterior falla:
-          gh run list --workflow=ci.yml --limit=1 --json databaseId --jq '.[0].databaseId' > run_id.txt
-          gh run view $(cat run_id.txt) --log-failed >> ci_failure.log 2>&1 || true
-          cat ci_failure.log
 
       - uses: actions/setup-python@v5.3.0
         with:
           python-version: '3.11'
 
-      - name: Analizar y fixear con IA
+      - name: Obtener logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run view ${{ github.event.workflow_run.id }} --log-failed > ci_failure.log 2>&1 || true
+          cat ci_failure.log
+
+      - name: Fix con IA
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_TOKEN: ${{ secrets.CF_TOKEN }}
@@ -52,7 +50,7 @@ jobs:
             -H "Authorization: Bearer $CF_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" | jq -r '.result.response')
-          echo "=== FIX PROPOSAL ==="
+          echo "=== FIX ==="
           echo "$FIX"
           echo "$FIX" > fix_proposal.py
           if python -c "import ast; ast.parse(open('fix_proposal.py').read())" 2>/dev/null; then
@@ -63,7 +61,7 @@ jobs:
               git config user.email 'ci@bot.local'
               git add src/calculadora.py
               git commit -m 'fix: auto-fix CI failure [skip ci]'
-              git push
+              git push origin HEAD
               echo "Fix aplicado"
             else
               echo "Fix no paso tests"
