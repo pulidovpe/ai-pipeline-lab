@@ -1,0 +1,73 @@
+name: AI CI Fix
+on:
+  workflow_run:
+    workflows: ['CI Tests']
+    types: [completed]
+
+jobs:
+  fix:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - name: Obtener logs del CI fallido
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run view ${{ github.event.workflow_run.id }} --log-failed > ci_failure.log 2>&1 || true
+          cat ci_failure.log
+    
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: '3.11'
+
+      - name: Analizar y fixear con IA
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CF_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pip install pytest -q
+          LOGS=$(head -150 ci_failure.log)
+          SRC=$(cat src/calculadora.py)
+          PAYLOAD=$(jq -n --arg logs "$LOGS" --arg src "$SRC" '{
+            "messages":[{
+              "role":"user",
+              "content": ("CI fallido. Logs:\n" + $logs + " \n\nCodigo actual src/calculadora.py:\n " + $src + " \n\nResponde SOLO con el codigo Python corregido completo. Sin explicaciones, sin markdown, solo el codigo.")
+            }]
+          }')
+          
+          FIX=$(curl -s \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            | jq -r '.result.response')
+            
+          echo "$FIX" > fix_proposal.py
+          
+          # Validar que es Python valido y que pasa los tests
+          if python -c "import ast; ast.parse(open('fix_proposal.py').read())" 2>/dev/null; then
+            pip install pytest -q
+            cp fix_proposal.py src/calculadora.py
+            if pytest tests/ -q 2>/dev/null; then
+              git config user.name 'ai-ci-bot'
+              git config user.email 'ci@bot.local'
+              git add src/calculadora.py
+              git commit -m 'fix: auto-fix CI failure [skip ci]'
+              git push
+              echo "Fix aplicado exitosamente"
+            else
+              echo "Fix no paso los tests, descartado"
+            fi
+          else
+            echo "Fix no es Python valido, descartado"
+          fi
