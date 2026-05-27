@@ -1,4 +1,7 @@
 def dividir(a, b):
-  return a / b # Sin ZeroDivisionError
+    if b == 0:
+        raise ZeroDivisionError("division by zero")
+    return a / b
+
 def calcular_promedio(numeros):
-  return sum(numeros) / len(numeros) # Sin ValueError para lista vacia
+    return sum(numeros) / len(numeros)
