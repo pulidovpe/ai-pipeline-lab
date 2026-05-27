@@ -10,21 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.2.2
-      
       - uses: actions/setup-python@v5.3.0
         with:
           python-version: '3.11'
-      
       - run: pip install -r requirements-dev.txt
-      
       - name: Run tests
         run: |
           export PYTHONPATH=$PYTHONPATH:$(pwd)
           pytest tests/ -v 2>&1 | tee test_output.log
-      
-      - uses: actions/upload-artifact@v4
+          exit ${PIPESTATUS[0]}
+      - uses: actions/upload-artifact@v4.6.2
         if: failure()
         with:
           name: test-logs
           path: test_output.log
-    
