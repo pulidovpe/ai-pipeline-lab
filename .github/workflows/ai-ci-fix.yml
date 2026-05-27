@@ -58,6 +58,7 @@ jobs:
           if python -c "import ast; ast.parse(open('fix_proposal.py').read())" 2>/dev/null; then
             pip install pytest -q
             cp fix_proposal.py src/calculadora.py
+            export PYTHONPATH=$PYTHONPATH:$(pwd)
             if pytest tests/ -q 2>/dev/null; then
               git config user.name 'ai-ci-bot'
               git config user.email 'ci@bot.local'
