@@ -41,6 +41,7 @@ jobs:
           pip install pytest -q
           LOGS=$(head -150 ci_failure.log)
           SRC=$(cat src/calculadora.py)
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
           PAYLOAD=$(jq -n --arg l "$LOGS" --arg s "$SRC" '{
             "messages":[{"role":"user","content":
               ("Eres un asistente que solo responde con codigo Python puro.\nNUNCA uses markdown, NUNCA uses bloques de codigo, NUNCA escribas explicaciones.\nSolo escribe el codigo Python directamente.\n\nCI fallido. Logs:\n"+$l+"\n\nCodigo src/calculadora.py:\n"+$s+"\n\nEscribe el archivo corregido completo.")
@@ -51,17 +52,10 @@ jobs:
             -H "Authorization: Bearer $CF_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" | jq -r '.result.response')
-
           echo "=== RAW FIX ==="
           echo "$FIX"
-
-          # Limpiar markdown si la IA lo incluye igual
           CLEAN=$(echo "$FIX" | sed '/^```/d' | sed '/^#/d' | sed '/^Here/d' | sed '/^This/d' | sed '/^The/d' | sed '/^Note/d')
-
-          echo "=== CLEAN FIX ==="
-          echo "$CLEAN"
           echo "$CLEAN" > fix_proposal.py
-
           if python -c "import ast; ast.parse(open('fix_proposal.py').read())" 2>/dev/null; then
             cp fix_proposal.py src/calculadora.py
             export PYTHONPATH=$PYTHONPATH:$(pwd)
@@ -70,8 +64,8 @@ jobs:
               git config user.email 'ci@bot.local'
               git add src/calculadora.py
               git commit -m 'fix: auto-fix CI failure [skip ci]'
-              git push origin HEAD
-              echo "Fix aplicado"
+              git push origin "HEAD:refs/heads/${BRANCH}"
+              echo "Fix aplicado en rama $BRANCH"
             else
               echo "Fix no paso tests"
             fi
