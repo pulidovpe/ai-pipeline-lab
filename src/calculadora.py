@@ -1,6 +1,9 @@
-## Nuevo cambio
 def dividir(a, b):
-  return a / b # Sin ZeroDivisionError
+  if b == 0:
+    raise ZeroDivisionError("No se puede dividir por cero")
+  return a / b
 
 def calcular_promedio(numeros):
-  return sum(numeros) / len(numeros) # Sin ValueError para lista vacia
+  if len(numeros) == 0:
+    raise ValueError("No se puede calcular el promedio de una lista vacia")
+  return sum(numeros) / len(numeros)
