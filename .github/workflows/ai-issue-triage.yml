@@ -1,0 +1,45 @@
+name: AI Issue Triage
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Triagear con IA
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CF_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          ISSUE_BODY=$(gh issue view "$ISSUE_NUMBER" --json body --jq '.body')
+          PAYLOAD=$(jq -n --arg t "$ISSUE_TITLE" --arg b "$ISSUE_BODY" '{
+            "messages":[{"role":"user","content":
+              ("Clasifica este issue. Responde SOLO JSON sin markdown:\n{\"tipo\":\"bug|feature-request|otro\",\"prioridad\":\"high|medium|low\",\"necesita_info\":true|false,\"pregunta\":\"si necesita_info=true, sino null\"}\n\nTitulo: "+$t+"\nCuerpo: "+$b)
+            }]
+          }')
+          RESPONSE=$(curl -s \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" | jq -r '.result.response')
+          TIPO=$(echo "$RESPONSE" | jq -r '.tipo // "otro"' 2>/dev/null || echo "otro")
+          PRIORIDAD=$(echo "$RESPONSE" | jq -r '.prioridad // "low"' 2>/dev/null || echo "low")
+          NECESITA=$(echo "$RESPONSE" | jq -r '.necesita_info // false' 2>/dev/null || echo "false")
+          PREGUNTA=$(echo "$RESPONSE" | jq -r '.pregunta // ""' 2>/dev/null || echo "")
+          gh issue edit "$ISSUE_NUMBER" --add-label "ai-triaged"
+          gh issue edit "$ISSUE_NUMBER" --add-label "$TIPO" 2>/dev/null || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "priority:$PRIORIDAD" 2>/dev/null || true
+          [ "$NECESITA" = "true" ] && gh issue edit "$ISSUE_NUMBER" --add-label "needs-info" || true
+          COMMENT="🤖 **Triage automático**
+      - Tipo: $TIPO | Prioridad: $PRIORIDAD"
+          [ "$NECESITA" = "true" ] && COMMENT="$COMMENT
+❓ $PREGUNTA"
+          gh issue comment "$ISSUE_NUMBER" --body "$COMMENT"

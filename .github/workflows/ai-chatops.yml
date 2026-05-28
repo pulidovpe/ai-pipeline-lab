@@ -1,0 +1,41 @@
+name: AI ChatOps
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  security-review:
+    if: |
+      github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/ai-review') &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Security review con IA
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.CF_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          DIFF=$(gh pr diff "$PR_NUMBER" | head -200)
+          PAYLOAD=$(jq -n --arg d "$DIFF" '{
+            "messages":[{"role":"user","content":
+              ("Security review. Reporta con CRITICAL/HIGH/MEDIUM/LOW, descripcion, linea y remediacion:\n"+$d)
+            }]
+          }')
+          RESPONSE=$(curl -s \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" | jq -r '.result.response')
+          gh pr comment "$PR_NUMBER" --body "## 🔒 Security Review
+
+$RESPONSE"
